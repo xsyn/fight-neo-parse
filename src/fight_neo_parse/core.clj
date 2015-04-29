@@ -1,4 +1,4 @@
-(ns data-playground.core
+(ns fight-neo-parse.core
   (:require [cheshire.core :refer :all]
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
