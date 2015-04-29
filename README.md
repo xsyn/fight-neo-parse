@@ -1,10 +1,10 @@
-# data-playground
+# fight-neo-parse
 
-A Clojure library designed to ... well, that part is up to you.
+A Clojure library designed to parse scraped fighter data, and format it into 2 CVS' for import into Neo4J.
 
 ## Usage
 
-FIXME
+### Redis
 
 ## License
 
