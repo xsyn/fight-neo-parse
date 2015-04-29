@@ -3,7 +3,13 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.data.json :as json]
+            [taoensso.encore :as encore]
+            [taoensso.carmine :as car :refer (wcar)]
+            [taoensso.timbre :as timbre]
             ))
+
+(def server1-conn {:pool {} :spec {:host "127.0.0.1" :port 6379}})
+(defmacro wcar* [& body] `(car/wcar server1-conn ~@body))
 
 (def fight-keys [:Name :Weight :Country :Height :Birthday :Class])
 
@@ -57,11 +63,25 @@
 (defn compare-row [x row]
   (if (= x (:name row)) (:id row)))
 
+(defn add-name-id-redis [row]
+  ;(timbre/info (str "Saving: " (:name row)))
+  (wcar* (car/set (:name row) (:id row)))
+  row)
+
+
 (defn create-fighter-map [csv-seq]
   (map #(select-keys % [:id :name]) (map #(zipmap (map keyword (first csv-seq)) %) (rest csv-seq))))
 
+(def rel-fighter (map add-name-id-redis (create-fighter-map (read-fighter-csv "./fighter-index.csv"))))
+
 (defn replace-name-id [x]
-  (first (remove nil? (map #(compare-row x %) (create-fighter-map (read-fighter-csv "./fighter-index.csv"))))))
+  (wcar* (car/get x)))
+
+(defn old-replace-name-id [x]
+  (first
+   (remove nil? (map #(compare-row x %)
+                     (create-fighter-map
+                      rel-fighter)))))
 
 (defn merge-opp-id [row]
   (merge row {:op-id (replace-name-id (:Opponent row))}))
@@ -76,22 +96,26 @@
     (map merge-opp-id (map #(merge % {:id id-num}) (flatten fights)))))
 
 (defn vectorize [row]
-  (map vec row))
+  (let [new-vec (map vec row)]
+    ;(timbre/info (str "Vector mapped: " (second (first new-vec))))
+    new-vec))
 
 ;; fighter-index = (create-fighter-map (read-fighter-csv "./fighter-index.xsc"))
 (defn get-fight-records [path-in]
   (let [records (get-records path-in)
         index-range (range 0 (count records))
-        records-seq (map vals (map #(:Fights (nth records %)) index-range))
-        id-zip  (zipmap index-range records-seq)]
-     (map compress-id id-zip)))
+        records-seq (map vals (map #(:Fights (nth records %)) index-range))]
+     (map compress-id (zipmap index-range records-seq))))
 
 (defn get-fight-vals [fights]
   (map vals fights))
+
+; (write-rel-csv "./resources/results.json" "./rel.csv")
 
 (defn write-rel-csv [path-in path-out]
   (with-open [out-file (io/writer path-out)]
     (csv/write-csv out-file
                    (vec
                     (cons ["op-id" "id" "event" "method" "verdict" "time" "date" "round" "opponent"]
-                          (flatten (map vectorize (map get-fight-vals (get-fight-records path-in)))))))))
+                          (map vec (map flatten (map get-fight-vals (get-fight-records path-in)))))))))
+
